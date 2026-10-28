@@ -179,6 +179,50 @@ func TestCreateAd(t *testing.T) {
 	})
 }
 
+func TestDeleteAdByID(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("deletes the ad owned by the user", func(t *testing.T) {
+		dao, mock := newMockDAO(t)
+		mock.ExpectExec("DELETE").
+			WithArgs(int64(42), "user-1").
+			WillReturnResult(sqlmock.NewResult(0, 1))
+
+		err := dao.DeleteAdByID(ctx, 42, "user-1")
+
+		require.NoError(t, err)
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("returns ErrNotFound when no row is deleted", func(t *testing.T) {
+		dao, mock := newMockDAO(t)
+		mock.ExpectExec("DELETE").
+			WithArgs(int64(42), "user-2").
+			WillReturnResult(sqlmock.NewResult(0, 0))
+
+		err := dao.DeleteAdByID(ctx, 42, "user-2")
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, adsdao.ErrNotFound)
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("returns error on query failure", func(t *testing.T) {
+		dao, mock := newMockDAO(t)
+		boom := errors.New("connection reset")
+		mock.ExpectExec("DELETE").
+			WithArgs(int64(1), "user-1").
+			WillReturnError(boom)
+
+		err := dao.DeleteAdByID(ctx, 1, "user-1")
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, boom)
+		assert.NotErrorIs(t, err, adsdao.ErrNotFound)
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
 func TestTransaction(t *testing.T) {
 	ctx := context.Background()
 	req := adsdao.CreateAdRequest{
