@@ -34,6 +34,7 @@ func run() error {
 
 	router := http.NewRouter(http.Usecases{
 		CreateAd: usecase.NewCreateAdFunc(adDAO),
+		DeleteAd: usecase.NewDeleteAdFunc(adDAO),
 		GetAd:    usecase.NewGetAdByIDFunc(adDAO),
 		ListAds:  usecase.NewListAdsFunc(adDAO),
 	})
