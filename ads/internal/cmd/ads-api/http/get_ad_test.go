@@ -52,6 +52,7 @@ func TestHandlerGetAd(t *testing.T) {
 		assert.Equal(t, int64(42), got.ID)
 		assert.Equal(t, "mountain bike", got.Title)
 		assert.Equal(t, int64(15000), got.PriceCents)
+		assert.Equal(t, 150.0, got.Price)
 		assert.Equal(t, "https://example.com/bike.jpg", got.PhotoURL)
 		assert.Equal(t, "user-1", got.UserID)
 		assert.Equal(t, createdAt, got.CreatedAt)

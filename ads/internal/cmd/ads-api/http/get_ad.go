@@ -11,13 +11,16 @@ import (
 )
 
 type getAdResponse struct {
-	ID         int64     `json:"id"`
-	Title      string    `json:"title"`
-	PriceCents int64     `json:"price_cents"`
-	PhotoURL   string    `json:"photo_url"`
-	UserID     string    `json:"user_id"`
-	Username   *string   `json:"username"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID    int64  `json:"id"`
+	Title string `json:"title"`
+	// Deprecated: use Price. Kept so existing web and mobile clients keep working.
+	PriceCents int64 `json:"price_cents"`
+	// Price is the price in euros.
+	Price     float64   `json:"price"`
+	PhotoURL  string    `json:"photo_url"`
+	UserID    string    `json:"user_id"`
+	Username  *string   `json:"username"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 func adToGetAdResponse(d usecase.AdDetails) getAdResponse {
@@ -25,6 +28,7 @@ func adToGetAdResponse(d usecase.AdDetails) getAdResponse {
 		ID:         int64(d.ID),
 		Title:      d.Title,
 		PriceCents: d.Price,
+		Price:      centsToPrice(d.Price),
 		PhotoURL:   d.PhotoURL,
 		UserID:     d.UserID.String(),
 		CreatedAt:  d.CreatedAt.UTC(),

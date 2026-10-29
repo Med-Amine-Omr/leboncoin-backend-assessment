@@ -26,12 +26,25 @@ func handlerImportAds(createAd usecase.CreateAdFunc) http.HandlerFunc {
 		}
 
 		ownerID := domain.UserID(middleware.UserIDFromRequest(r))
+
+		// Validate every price before creating anything, so an invalid item cannot leave a partial import behind.
+		prices := make([]int64, len(body.Ads))
+		for i, item := range body.Ads {
+			priceCents, err := item.priceInCents()
+			if err != nil {
+				rw.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			prices[i] = priceCents
+		}
+
 		ids := make([]int64, 0, len(body.Ads))
 
-		for _, item := range body.Ads {
+		for i, item := range body.Ads {
 			adID, err := createAd(r.Context(), usecase.CreateAdRequest{
 				Title:      item.Title,
-				PriceCents: item.PriceCents,
+				PriceCents: prices[i],
 				PhotoURL:   item.PhotoURL,
 				OwnerID:    ownerID,
 			})
