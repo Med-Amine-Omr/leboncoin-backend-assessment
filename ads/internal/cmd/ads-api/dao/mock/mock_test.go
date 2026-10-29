@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,7 +25,7 @@ func TestMock_SearchAds(t *testing.T) {
 
 		got, err := m.SearchAds(ctx, req)
 
-		require.Error(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, want, got)
 	})
 
@@ -162,4 +163,60 @@ func TestMock_Rollback(t *testing.T) {
 
 		assert.ErrorIs(t, m.Rollback(), boom)
 	})
+}
+
+func TestMock_DeleteAdByID(t *testing.T) {
+	m := mock.New(t)
+
+	m.On("DeleteAdByID", ctx, domain.AdID(42), domain.UserID("user-1")).Return(adsdao.ErrNotFound)
+
+	assert.ErrorIs(t, m.DeleteAdByID(ctx, 42, "user-1"), adsdao.ErrNotFound)
+}
+
+func TestMock_ClaimImport(t *testing.T) {
+	m := mock.New(t)
+
+	m.On("ClaimImport", ctx, domain.UserID("user-1"), "key-1").Return(false, []domain.AdID{10, 11}, nil)
+
+	claimed, adIDs, err := m.ClaimImport(ctx, "user-1", "key-1")
+
+	require.NoError(t, err)
+	assert.False(t, claimed)
+	assert.Equal(t, []domain.AdID{10, 11}, adIDs)
+}
+
+func TestMock_CompleteImport(t *testing.T) {
+	m := mock.New(t)
+
+	m.On("CompleteImport", ctx, domain.UserID("user-1"), "key-1", []domain.AdID{10, 11}).Return(nil)
+
+	require.NoError(t, m.CompleteImport(ctx, "user-1", "key-1", []domain.AdID{10, 11}))
+}
+
+func TestMock_LockOwnerPublications(t *testing.T) {
+	m := mock.New(t)
+	boom := errors.New("lock timeout")
+
+	m.On("LockOwnerPublications", ctx, domain.UserID("user-1")).Return(boom)
+
+	assert.ErrorIs(t, m.LockOwnerPublications(ctx, "user-1"), boom)
+}
+
+func TestMock_CountRecentPublications(t *testing.T) {
+	m := mock.New(t)
+
+	m.On("CountRecentPublications", ctx, domain.UserID("user-1"), 24*time.Hour).Return(3, nil)
+
+	got, err := m.CountRecentPublications(ctx, "user-1", 24*time.Hour)
+
+	require.NoError(t, err)
+	assert.Equal(t, 3, got)
+}
+
+func TestMock_RecordPublication(t *testing.T) {
+	m := mock.New(t)
+
+	m.On("RecordPublication", ctx, domain.UserID("user-1"), domain.AdID(42)).Return(nil)
+
+	require.NoError(t, m.RecordPublication(ctx, "user-1", 42))
 }
