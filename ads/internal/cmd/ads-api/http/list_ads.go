@@ -11,12 +11,15 @@ import (
 )
 
 type listAdsItem struct {
-	ID         int64     `json:"id"`
-	Title      string    `json:"title"`
-	PriceCents int64     `json:"price_cents"`
-	PhotoURL   string    `json:"photo_url"`
-	UserID     string    `json:"user_id"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID    int64  `json:"id"`
+	Title string `json:"title"`
+	// Deprecated: use Price. Kept so existing web and mobile clients keep working.
+	PriceCents int64 `json:"price_cents"`
+	// Price is the price in euros.
+	Price     float64   `json:"price"`
+	PhotoURL  string    `json:"photo_url"`
+	UserID    string    `json:"user_id"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type listAdsResponse struct {
@@ -28,6 +31,7 @@ func adToListAdsItem(a domain.Ad) listAdsItem {
 		ID:         int64(a.ID),
 		Title:      a.Title,
 		PriceCents: a.Price,
+		Price:      centsToPrice(a.Price),
 		PhotoURL:   a.PhotoURL,
 		UserID:     a.UserID.String(),
 		CreatedAt:  a.CreatedAt.UTC(),
