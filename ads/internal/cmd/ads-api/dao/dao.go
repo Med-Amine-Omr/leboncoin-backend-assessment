@@ -16,6 +16,10 @@ type Store interface {
 	SearchAds(ctx context.Context, req SearchAdsRequest) ([]domain.Ad, error)
 	// DeleteAdByID deletes the ad identified by id if it is owned by ownerID, or returns ErrNotFound.
 	DeleteAdByID(ctx context.Context, id domain.AdID, ownerID domain.UserID) error
+	// ClaimImport reserves an import idempotency key for the owner. It returns claimed=false and the identifiers created by the first import when the key was already used. Called inside a transaction, a concurrent import with the same key waits until this one commits or rolls back.
+	ClaimImport(ctx context.Context, ownerID domain.UserID, key string) (claimed bool, adIDs []domain.AdID, err error)
+	// CompleteImport records the identifiers created by a claimed import.
+	CompleteImport(ctx context.Context, ownerID domain.UserID, key string, adIDs []domain.AdID) error
 }
 
 // DAO stores and retrieves ads.

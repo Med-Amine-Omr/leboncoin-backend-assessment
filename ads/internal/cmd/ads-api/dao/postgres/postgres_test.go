@@ -323,3 +323,65 @@ func TestTransaction(t *testing.T) {
 		require.Error(t, dao.Rollback())
 	})
 }
+
+func TestClaimImport(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("claims a new key", func(t *testing.T) {
+		dao, mock := newMockDAO(t)
+		mock.ExpectExec("INSERT INTO ad_imports").
+			WithArgs("user-1", "key-1").
+			WillReturnResult(sqlmock.NewResult(0, 1))
+
+		claimed, adIDs, err := dao.ClaimImport(ctx, "user-1", "key-1")
+
+		require.NoError(t, err)
+		assert.True(t, claimed)
+		assert.Nil(t, adIDs)
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("returns the ads of the import that already used the key", func(t *testing.T) {
+		dao, mock := newMockDAO(t)
+		mock.ExpectExec("INSERT INTO ad_imports").
+			WithArgs("user-1", "key-1").
+			WillReturnResult(sqlmock.NewResult(0, 0))
+		mock.ExpectQuery("SELECT ad_ids").
+			WithArgs("user-1", "key-1").
+			WillReturnRows(sqlmock.NewRows([]string{"ad_ids"}).AddRow("[10,11]"))
+
+		claimed, adIDs, err := dao.ClaimImport(ctx, "user-1", "key-1")
+
+		require.NoError(t, err)
+		assert.False(t, claimed)
+		assert.Equal(t, []domain.AdID{10, 11}, adIDs)
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("returns error when the claim fails", func(t *testing.T) {
+		dao, mock := newMockDAO(t)
+		boom := errors.New("db down")
+		mock.ExpectExec("INSERT INTO ad_imports").
+			WithArgs("user-1", "key-1").
+			WillReturnError(boom)
+
+		_, _, err := dao.ClaimImport(ctx, "user-1", "key-1")
+
+		assert.ErrorIs(t, err, boom)
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestCompleteImport(t *testing.T) {
+	ctx := context.Background()
+
+	dao, mock := newMockDAO(t)
+	mock.ExpectExec("UPDATE ad_imports").
+		WithArgs("user-1", "key-1", "[10,11]").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	err := dao.CompleteImport(ctx, "user-1", "key-1", []domain.AdID{10, 11})
+
+	require.NoError(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
