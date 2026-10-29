@@ -7,7 +7,6 @@ import (
 	"time"
 
 	adsdao "github.mpi-internal.com/leboncoin/backend-hiring-assessment/ads/internal/cmd/ads-api/dao"
-	"github.mpi-internal.com/leboncoin/backend-hiring-assessment/ads/internal/cmd/ads-api/domain"
 	"github.mpi-internal.com/leboncoin/backend-hiring-assessment/ads/internal/cmd/ads-api/usecase"
 )
 
@@ -17,18 +16,26 @@ type getAdResponse struct {
 	PriceCents int64     `json:"price_cents"`
 	PhotoURL   string    `json:"photo_url"`
 	UserID     string    `json:"user_id"`
+	Username   *string   `json:"username"`
 	CreatedAt  time.Time `json:"created_at"`
 }
 
-func adToGetAdResponse(a domain.Ad) getAdResponse {
-	return getAdResponse{
-		ID:         int64(a.ID),
-		Title:      a.Title,
-		PriceCents: a.Price,
-		PhotoURL:   a.PhotoURL,
-		UserID:     a.UserID.String(),
-		CreatedAt:  a.CreatedAt.UTC(),
+func adToGetAdResponse(d usecase.AdDetails) getAdResponse {
+	resp := getAdResponse{
+		ID:         int64(d.ID),
+		Title:      d.Title,
+		PriceCents: d.Price,
+		PhotoURL:   d.PhotoURL,
+		UserID:     d.UserID.String(),
+		CreatedAt:  d.CreatedAt.UTC(),
 	}
+
+	// The username is null rather than absent when the user service could not provide it, so clients get a stable schema.
+	if d.Username != "" {
+		resp.Username = &d.Username
+	}
+
+	return resp
 }
 
 func handlerGetAd(getAd usecase.GetAdByIDFunc) http.HandlerFunc {
@@ -40,7 +47,7 @@ func handlerGetAd(getAd usecase.GetAdByIDFunc) http.HandlerFunc {
 			return
 		}
 
-		ad, err := getAd(r.Context(), adID)
+		details, err := getAd(r.Context(), adID)
 		if err != nil {
 			if errors.Is(err, adsdao.ErrNotFound) {
 				rw.WriteHeader(http.StatusNotFound)
@@ -52,6 +59,6 @@ func handlerGetAd(getAd usecase.GetAdByIDFunc) http.HandlerFunc {
 		}
 
 		rw.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(rw).Encode(adToGetAdResponse(ad))
+		_ = json.NewEncoder(rw).Encode(adToGetAdResponse(details))
 	}
 }
