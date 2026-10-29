@@ -2,6 +2,7 @@ package dao
 
 import (
 	"context"
+	"time"
 
 	"github.mpi-internal.com/leboncoin/backend-hiring-assessment/ads/internal/cmd/ads-api/domain"
 )
@@ -20,6 +21,12 @@ type Store interface {
 	ClaimImport(ctx context.Context, ownerID domain.UserID, key string) (claimed bool, adIDs []domain.AdID, err error)
 	// CompleteImport records the identifiers created by a claimed import.
 	CompleteImport(ctx context.Context, ownerID domain.UserID, key string, adIDs []domain.AdID) error
+	// LockOwnerPublications serializes the publications of the owner until the current transaction ends, so concurrent requests cannot both pass the quota check. It must be called inside a transaction.
+	LockOwnerPublications(ctx context.Context, ownerID domain.UserID) error
+	// CountRecentPublications returns the number of ads the owner published through POST /ads within the given rolling window, measured with the database clock.
+	CountRecentPublications(ctx context.Context, ownerID domain.UserID, window time.Duration) (int, error)
+	// RecordPublication logs that the owner published the given ad through POST /ads.
+	RecordPublication(ctx context.Context, ownerID domain.UserID, adID domain.AdID) error
 }
 
 // DAO stores and retrieves ads.

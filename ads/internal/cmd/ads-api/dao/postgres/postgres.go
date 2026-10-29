@@ -264,3 +264,46 @@ func (d *DAO) CompleteImport(ctx context.Context, ownerID domain.UserID, key str
 
 	return nil
 }
+
+// LockOwnerPublications serializes the publications of the owner until the current transaction ends.
+func (d *DAO) LockOwnerPublications(ctx context.Context, ownerID domain.UserID) error {
+	if d.tx == nil {
+		return errors.New("unable to lock publications outside a transaction")
+	}
+
+	// The lock is released automatically when the transaction commits or rolls back. The prefix keeps it apart from any other advisory lock.
+	const query = `SELECT pg_advisory_xact_lock(hashtext('ad_publications:' || $1))`
+
+	if _, err := d.tx.ExecContext(ctx, query, string(ownerID)); err != nil {
+		return fmt.Errorf("unable to lock publications: %w", err)
+	}
+
+	return nil
+}
+
+// CountRecentPublications returns the number of ads the owner published within the rolling window.
+func (d *DAO) CountRecentPublications(ctx context.Context, ownerID domain.UserID, window time.Duration) (int, error) {
+	const query = `
+		SELECT count(*)
+		FROM ad_publications
+		WHERE owner_id = $1::uuid
+		  AND published_at > now() - ($2::float8 * interval '1 second')`
+
+	var count int
+	if err := d.runner().QueryRowContext(ctx, query, string(ownerID), window.Seconds()).Scan(&count); err != nil {
+		return 0, fmt.Errorf("unable to count publications: %w", err)
+	}
+
+	return count, nil
+}
+
+// RecordPublication logs that the owner published the given ad.
+func (d *DAO) RecordPublication(ctx context.Context, ownerID domain.UserID, adID domain.AdID) error {
+	const query = `INSERT INTO ad_publications (owner_id, ad_id) VALUES ($1::uuid, $2)`
+
+	if _, err := d.runner().ExecContext(ctx, query, string(ownerID), int64(adID)); err != nil {
+		return fmt.Errorf("unable to record publication: %w", err)
+	}
+
+	return nil
+}
