@@ -139,4 +139,22 @@ func TestHandlerImportAds(t *testing.T) {
 		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 		assert.Equal(t, 2, call)
 	})
+
+	t.Run("returns 400 and creates nothing when one price is invalid", func(t *testing.T) {
+		srv := newImportAdsServer(func(_ context.Context, _ usecase.CreateAdRequest) (domain.AdID, error) {
+			t.Fatal("usecase should not be called")
+			return 0, nil
+		})
+		defer srv.Close()
+
+		valid, invalid := 50.0, 19.999
+		body := importAdsBody{Ads: []createAdBody{
+			{Title: "bike", Price: &valid},
+			{Title: "scooter", Price: &invalid},
+		}}
+		resp := postJSON(t, srv.URL+"/ads/import", body, "user-1")
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
 }

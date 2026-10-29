@@ -124,4 +124,48 @@ func TestHandlerCreateAd(t *testing.T) {
 
 		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	})
+
+	t.Run("accepts a price in euros and converts it to cents", func(t *testing.T) {
+		var received usecase.CreateAdRequest
+		srv := newCreateAdServer(func(_ context.Context, req usecase.CreateAdRequest) (domain.AdID, error) {
+			received = req
+			return domain.AdID(1), nil
+		})
+		defer srv.Close()
+
+		price := 19.99
+		resp := postJSON(t, srv.URL+"/ads", createAdBody{Title: "bike", Price: &price}, "user-1")
+		defer resp.Body.Close()
+
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+		assert.Equal(t, int64(1999), received.PriceCents)
+	})
+
+	t.Run("returns 400 when the price has more than 2 decimals", func(t *testing.T) {
+		srv := newCreateAdServer(func(_ context.Context, _ usecase.CreateAdRequest) (domain.AdID, error) {
+			t.Fatal("usecase should not be called")
+			return 0, nil
+		})
+		defer srv.Close()
+
+		price := 19.999
+		resp := postJSON(t, srv.URL+"/ads", createAdBody{Title: "bike", Price: &price}, "user-1")
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("returns 400 when both price and price_cents are sent", func(t *testing.T) {
+		srv := newCreateAdServer(func(_ context.Context, _ usecase.CreateAdRequest) (domain.AdID, error) {
+			t.Fatal("usecase should not be called")
+			return 0, nil
+		})
+		defer srv.Close()
+
+		price := 19.99
+		resp := postJSON(t, srv.URL+"/ads", createAdBody{Title: "bike", Price: &price, PriceCents: 1999}, "user-1")
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
 }
