@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Lint and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Check formatting
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "Files not formatted with gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        run: |
+          go vet ./...
+          go vet -tags=integration ./...
+
+      - name: Unit tests
+        run: go test -race -count=1 ./...
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ads
+          POSTGRES_PASSWORD: ads
+          POSTGRES_DB: ads
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ads -d ads"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://ads:ads@localhost:5432/ads?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Apply migrations
+        run: |
+          for migration in ads/internal/cmd/ads-api/dao/postgres/migrations/*.sql; do
+            echo "Applying $migration"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
+          done
+
+      - name: Integration tests
+        run: go test -race -count=1 -tags=integration ./...
