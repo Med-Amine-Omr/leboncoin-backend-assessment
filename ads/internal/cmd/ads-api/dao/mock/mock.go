@@ -57,6 +57,20 @@ func (m *Mock) DeleteAdByID(ctx context.Context, id domain.AdID, ownerID domain.
 	return m.Called(ctx, id, ownerID).Error(0)
 }
 
+// ClaimImport returns the claim result, the previous ad identifiers and the error set on the mock.
+func (m *Mock) ClaimImport(ctx context.Context, ownerID domain.UserID, key string) (bool, []domain.AdID, error) {
+	args := m.Called(ctx, ownerID, key)
+
+	adIDs, _ := args.Get(1).([]domain.AdID)
+
+	return args.Bool(0), adIDs, args.Error(2)
+}
+
+// CompleteImport returns the error set on the mock.
+func (m *Mock) CompleteImport(ctx context.Context, ownerID domain.UserID, key string, adIDs []domain.AdID) error {
+	return m.Called(ctx, ownerID, key, adIDs).Error(0)
+}
+
 // Begin returns the mock itself as the transaction, so expectations stay set on a single object, and the error set on the mock.
 func (m *Mock) Begin(ctx context.Context) (adsdao.Tx, error) {
 	args := m.Called(ctx)

@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -210,4 +211,56 @@ func scanAd(row *sql.Row) (domain.Ad, error) {
 	}
 
 	return ad, nil
+}
+
+// ClaimImport reserves an import idempotency key for the owner, or returns the identifiers created by the import that already used it.
+func (d *DAO) ClaimImport(ctx context.Context, ownerID domain.UserID, key string) (bool, []domain.AdID, error) {
+	const claim = `
+		INSERT INTO ad_imports (owner_id, idempotency_key)
+		VALUES ($1::uuid, $2)
+		ON CONFLICT (owner_id, idempotency_key) DO NOTHING`
+
+	res, err := d.runner().ExecContext(ctx, claim, string(ownerID), key)
+	if err != nil {
+		return false, nil, fmt.Errorf("unable to claim import: %w", err)
+	}
+
+	inserted, err := res.RowsAffected()
+	if err != nil {
+		return false, nil, fmt.Errorf("unable to claim import: %w", err)
+	}
+
+	if inserted == 1 {
+		return true, nil, nil
+	}
+
+	const previous = `SELECT ad_ids::text FROM ad_imports WHERE owner_id = $1::uuid AND idempotency_key = $2`
+
+	var raw string
+	if err := d.runner().QueryRowContext(ctx, previous, string(ownerID), key).Scan(&raw); err != nil {
+		return false, nil, fmt.Errorf("unable to read previous import: %w", err)
+	}
+
+	var adIDs []domain.AdID
+	if err := json.Unmarshal([]byte(raw), &adIDs); err != nil {
+		return false, nil, fmt.Errorf("unable to decode previous import: %w", err)
+	}
+
+	return false, adIDs, nil
+}
+
+// CompleteImport records the identifiers created by a claimed import.
+func (d *DAO) CompleteImport(ctx context.Context, ownerID domain.UserID, key string, adIDs []domain.AdID) error {
+	raw, err := json.Marshal(adIDs)
+	if err != nil {
+		return fmt.Errorf("unable to encode import result: %w", err)
+	}
+
+	const query = `UPDATE ad_imports SET ad_ids = $3::jsonb WHERE owner_id = $1::uuid AND idempotency_key = $2`
+
+	if _, err := d.runner().ExecContext(ctx, query, string(ownerID), key, string(raw)); err != nil {
+		return fmt.Errorf("unable to complete import: %w", err)
+	}
+
+	return nil
 }
