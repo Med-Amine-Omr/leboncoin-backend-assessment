@@ -385,3 +385,76 @@ func TestCompleteImport(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
+
+func TestLockOwnerPublications(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("takes the owner lock inside a transaction", func(t *testing.T) {
+		dao, mock := newMockDAO(t)
+		mock.ExpectBegin()
+		mock.ExpectExec("pg_advisory_xact_lock").
+			WithArgs("user-1").
+			WillReturnResult(sqlmock.NewResult(0, 0))
+
+		tx, err := dao.Begin(ctx)
+		require.NoError(t, err)
+
+		err = tx.LockOwnerPublications(ctx, "user-1")
+
+		require.NoError(t, err)
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("refuses to lock outside a transaction", func(t *testing.T) {
+		dao, mock := newMockDAO(t)
+
+		err := dao.LockOwnerPublications(ctx, "user-1")
+
+		require.Error(t, err)
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestCountRecentPublications(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("returns the number of publications in the window", func(t *testing.T) {
+		dao, mock := newMockDAO(t)
+		mock.ExpectQuery("SELECT count").
+			WithArgs("user-1", float64(86400)).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(3))
+
+		got, err := dao.CountRecentPublications(ctx, "user-1", 24*time.Hour)
+
+		require.NoError(t, err)
+		assert.Equal(t, 3, got)
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("returns error when the query fails", func(t *testing.T) {
+		dao, mock := newMockDAO(t)
+		boom := errors.New("db down")
+		mock.ExpectQuery("SELECT count").
+			WithArgs("user-1", float64(86400)).
+			WillReturnError(boom)
+
+		_, err := dao.CountRecentPublications(ctx, "user-1", 24*time.Hour)
+
+		assert.ErrorIs(t, err, boom)
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestRecordPublication(t *testing.T) {
+	ctx := context.Background()
+
+	dao, mock := newMockDAO(t)
+	mock.ExpectExec("INSERT INTO ad_publications").
+		WithArgs("user-1", int64(42)).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	err := dao.RecordPublication(ctx, "user-1", 42)
+
+	require.NoError(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
